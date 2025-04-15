@@ -3,6 +3,10 @@
 
 #include "types.h"
 
+#ifdef __SSE__
+#include <xmmintrin.h>
+#endif
+
 struct LELight
 {
     f32 posX;
@@ -15,7 +19,11 @@ struct LELight
     f32 intensity;
 };
 
-void le_calculate_vertex_lighting(Vtx_t* v, Color out);
+#ifdef __SSE__
+void le_calculate_vertex_lighting(f32 x, f32 y, f32 z, Vtx_t* v, Color out, bool useVertexColors, __m128 mat0, __m128 mat1, __m128 mat2, __m128 mat3);
+#else
+void le_calculate_vertex_lighting(f32 x, f32 y, f32 z, Vtx_t* v, Color out, bool useVertexColors, float* mpMatrix);
+#endif
 /* |description|Calculates the lighting with `lightIntensityScalar` at a position and outputs the color in `out`|descriptionEnd|*/
 void le_calculate_lighting_color(Vec3f pos, Color out, f32 lightIntensityScalar);
 /* |description|Calculates the lighting direction from a position and outputs the result in `out`|descriptionEnd| */

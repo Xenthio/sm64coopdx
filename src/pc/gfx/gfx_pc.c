@@ -765,7 +765,7 @@ static void gfx_sp_pop_matrix(uint32_t count) {
     }
 }
 
-static float gfx_adjust_x_for_aspect_ratio(float x) {
+float gfx_adjust_x_for_aspect_ratio(float x) {
     return x * gfx_current_dimensions.x_adjust_ratio;
 }
 
@@ -868,7 +868,11 @@ static void OPTIMIZE_O3 gfx_sp_vertex(size_t n_vertices, size_t dest_index, cons
             if (rsp.geometry_mode & G_LIGHTING_ENGINE_EXT) {
                 Color color;
                 CTX_BEGIN(CTX_LIGHTING);
-                le_calculate_lighting_color(((Vtx_t*)v)->ob, color, 1.0f);
+#ifdef __SSE__
+                le_calculate_vertex_lighting(x, y, z, (Vtx_t*)v, color, false, mat0, mat1, mat2, mat3);
+#else
+                le_calculate_vertex_lighting(x, y, z, (Vtx_t*)v, color, false, rsp.MP_matrix);
+#endif
                 CTX_END(CTX_LIGHTING);
 
                 d->color.r *= color[0] / 255.0f;
@@ -878,7 +882,11 @@ static void OPTIMIZE_O3 gfx_sp_vertex(size_t n_vertices, size_t dest_index, cons
         } else if (rsp.geometry_mode & G_LIGHTING_ENGINE_EXT) {
             Color color;
             CTX_BEGIN(CTX_LIGHTING);
-            le_calculate_vertex_lighting((Vtx_t*)v, color);
+#ifdef __SSE__
+            le_calculate_vertex_lighting(x, y, z, (Vtx_t*)v, color, true, mat0, mat1, mat2, mat3);
+#else
+            le_calculate_vertex_lighting(x, y, z, (Vtx_t*)v, color, true, rsp.MP_matrix);
+#endif
             CTX_END(CTX_LIGHTING);
             if (luaVertexColor) {
                 d->color.r = color[0] * vertexColorCached[0];

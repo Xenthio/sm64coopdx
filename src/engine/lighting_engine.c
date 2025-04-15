@@ -1,12 +1,12 @@
 #include "lighting_engine.h"
 #include "math_util.h"
 #include "surface_collision.h"
+#include "pc/gfx/gfx_pc.h"
 #include "pc/lua/utils/smlua_math_utils.h"
 #include "pc/debuglog.h"
 #include "data/dynos_cmap.cpp.h"
 
-#define LE_MAX_LIGHTS 256
-#define LE_TOTAL_WEIGHTED_LIGHTING
+#define LE_MAX_LIGHTS 32
 
 static Color sAmbientColor;
 static void* sLights = NULL;
@@ -18,23 +18,43 @@ static inline void color_set(Color color, u8 r, u8 g, u8 b) {
     color[2] = b;
 }
 
-void le_calculate_vertex_lighting(Vtx_t* v, Color out) {
+#ifdef __SSE__
+void le_calculate_vertex_lighting(f32 x, f32 y, f32 z, Vtx_t* v, Color out, bool useVertexColors, __m128 mat0, __m128 mat1, __m128 mat2, __m128 mat3) {
+#else
+void le_calculate_vertex_lighting(f32 x, f32 y, f32 z, Vtx_t* v, Color out, bool useVertexColors, float* mpMatrix) {
+#endif
     if (sLights == NULL) { return; }
 
-#ifdef LE_TOTAL_WEIGHTED_LIGHTING
-    f32 r = v->cn[0] * (sAmbientColor[0] / 255.0f);
-    f32 g = v->cn[1] * (sAmbientColor[1] / 255.0f);
-    f32 b = v->cn[2] * (sAmbientColor[2] / 255.0f);
-#else
-    f32 r = 0;
-    f32 g = 0;
-    f32 b = 0;
-#endif
+    f32 r = sAmbientColor[0];
+    f32 g = sAmbientColor[1];
+    f32 b = sAmbientColor[2];
+    if (useVertexColors) {
+        r *= (v->cn[0] / 255.0f);
+        g *= (v->cn[0] / 255.0f);
+        b *= (v->cn[0] / 255.0f);
+    }
+
     f32 weight = 1.0f;
     for (struct LELight* light = hmap_begin(sLights); light != NULL; light = hmap_next(sLights)) {
-        f32 diffX = light->posX - v->ob[0];
-        f32 diffY = light->posY - v->ob[1];
-        f32 diffZ = light->posZ - v->ob[2];
+#ifdef __SSE__
+        __m128 pos0 = _mm_set1_ps(light->posX);
+        __m128 pos1 = _mm_set1_ps(light->posY);
+        __m128 pos2 = _mm_set1_ps(light->posZ);
+
+        __m128 pos = _mm_add_ps(_mm_add_ps(_mm_add_ps(_mm_mul_ps(pos0, mat0), _mm_mul_ps(pos1, mat1)), _mm_mul_ps(pos2, mat2)), mat3);
+        f32 lX = pos[0]; // gfx_adjust_x_for_aspect_ratio(pos[0]);
+        f32 lY = pos[1];
+        f32 lZ = pos[2];
+#else
+        f32 lX = x * mpMatrix[0][0] + y * mpMatrix[1][0] + z * mpMatrix[2][0] + mpMatrix[3][0];
+        f32 lY = x * mpMatrix[0][1] + y * mpMatrix[1][1] + z * mpMatrix[2][1] + mpMatrix[3][1];
+        f32 lZ = x * mpMatrix[0][2] + y * mpMatrix[1][2] + z * mpMatrix[2][2] + mpMatrix[3][2];
+        lX = gfx_adjust_x_for_aspect_ratio(lX);
+#endif
+        
+        f32 diffX = lX - x;
+        f32 diffY = lY - y;
+        f32 diffZ = lZ - z;
         f32 dist = (diffX * diffX) + (diffY * diffY) + (diffZ * diffZ);
         f32 radius = light->radius * light->radius;
         if (dist > radius) { continue; }
@@ -46,29 +66,18 @@ void le_calculate_vertex_lighting(Vtx_t* v, Color out) {
         weight += brightness;
     }
 
-#ifdef LE_TOTAL_WEIGHTED_LIGHTING
     out[0] = min(r / weight, 255);
     out[1] = min(g / weight, 255);
     out[2] = min(b / weight, 255);
-#else
-    out[0] = min((v->cn[0] * (sAmbientColor[0] / 255.0f)) + (r / weight), 255);
-    out[1] = min((v->cn[1] * (sAmbientColor[1] / 255.0f)) + (g / weight), 255);
-    out[2] = min((v->cn[2] * (sAmbientColor[2] / 255.0f)) + (b / weight), 255);
-#endif
 }
 
 void le_calculate_lighting_color(Vec3f pos, Color out, f32 lightIntensityScalar) {
     if (sLights == NULL) { return; }
 
-#ifdef LE_TOTAL_WEIGHTED_LIGHTING
     f32 r = sAmbientColor[0];
     f32 g = sAmbientColor[1];
     f32 b = sAmbientColor[2];
-#else
-    f32 r = 0;
-    f32 g = 0;
-    f32 b = 0;
-#endif
+
     f32 weight = 1.0f;
     for (struct LELight* light = hmap_begin(sLights); light != NULL; light = hmap_next(sLights)) {
         f32 diffX = light->posX - pos[0];
@@ -85,15 +94,9 @@ void le_calculate_lighting_color(Vec3f pos, Color out, f32 lightIntensityScalar)
         weight += brightness;
     }
 
-#ifdef LE_TOTAL_WEIGHTED_LIGHTING
     out[0] = min(r / weight, 255);
     out[1] = min(g / weight, 255);
     out[2] = min(b / weight, 255);
-#else
-    out[0] = min(sAmbientColor[0] + (r / weight), 255);
-    out[1] = min(sAmbientColor[1] + (g / weight), 255);
-    out[2] = min(sAmbientColor[2] + (b / weight), 255);
-#endif
 }
 
 void le_calculate_lighting_dir(Vec3f pos, Vec3f out) {

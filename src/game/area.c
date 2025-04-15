@@ -249,8 +249,6 @@ void clear_areas(void) {
         gAreaData[i].musicParam = 0;
         gAreaData[i].musicParam2 = 0;
     }
-
-    le_clear();
 }
 
 void clear_area_graph_nodes(void) {
@@ -307,6 +305,8 @@ void unload_area(void) {
         gCurrentArea = NULL;
         gWarpTransition.isActive = FALSE;
     }
+
+    le_clear();
 }
 
 void load_mario_area(void) {

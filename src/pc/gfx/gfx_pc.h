@@ -25,6 +25,7 @@ extern f32 gFogIntensity;
 extern "C" {
 #endif
 
+float gfx_adjust_x_for_aspect_ratio(float x);
 void gfx_init(struct GfxWindowManagerAPI *wapi, struct GfxRenderingAPI *rapi, const char *window_title);
 struct GfxRenderingAPI *gfx_get_current_rendering_api(void);
 void gfx_start_frame(void);
